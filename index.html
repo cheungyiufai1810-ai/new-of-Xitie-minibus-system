@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>西鐵小巴系統</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚐</text></svg>">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ua-parser-js@1.0.37/dist/ua-parser.min.js"></script>
+<style>
+:root{--bg:#0f0f0f;--card:#1c1c1e;--gold:#fc0;--blue:#0a84ff;--red:#ff453a;--green:#30d158;--purple:#bf5af2;--orange:#ff9500;--radius:16px}
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+body{background:var(--bg);color:#fff;height:100vh;display:flex;flex-direction:column;/*修復：移除overflow:hidden，允許頁面滾動*/}
+.header{padding:10px;text-align:center;border-bottom:1px solid #333;flex-shrink:0;position:relative}
+.title{font-size:32px;font-weight:800;color:var(--gold)}
+.dev-tag{font-size:16px;color:#aaa;cursor:pointer}
+.global-voice-toggle{position:absolute;top:8px;right:10px;width:52px;height:52px;border-radius:50%;background:var(--green);border:none;color:#fff;font-size:26px;cursor:pointer}
+.global-voice-toggle.muted{background:var(--red)}
+.view{display:none;flex:1;overflow-y:auto;padding:12px;flex-direction:column}
+.view.active{display:flex}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;border:1px solid #333}
+.btn{width:100%;padding:18px;border-radius:16px;font-size:24px;font-weight:700;border:none;cursor:pointer;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn:active{opacity:.8;transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-portal{background:linear-gradient(135deg,#0a84ff,#06c)}
+.btn-driver{background:linear-gradient(135deg,#ff453a,#c62828)}
+.btn-secondary{background:#3a3a3c}
+.btn-warn{background:#ff9f0a;color:#000}
+.btn-green{background:var(--green)}
+.btn-red{background:var(--red)}
+.btn-purple{background:var(--purple)}
+.btn-google{background:#fff;color:#000;border:1px solid #ddd}
+/*修復：補返缺失 btn-primary btn-danger*/
+.btn-primary{background:linear-gradient(135deg,#00c853,#009624);}
+.btn-danger{background:linear-gradient(135deg,#ff1744,#b71c1c);}
+
+.row{display:flex;gap:12px;margin-bottom:10px}
+.row>*{flex:1}
+.badge{display:inline-block;padding:8px 20px;border-radius:20px;font-weight:700;font-size:18px;margin:4px}
+.badge-red{background:var(--red)}
+.badge-blue{background:var(--blue)}
+.badge-purple{background:var(--purple)}
+.big-number{font-size:56px;font-weight:800;text-align:center;margin:4px 0;color:var(--gold)}
+.station-name{font-size:32px;font-weight:700;text-align:center;margin:4px 0;color:var(--gold)}
+.msg-area{background:#1a1a1a;border-radius:14px;padding:12px;margin-top:8px}
+.msg-list{max-height:200px;overflow-y:auto;margin-bottom:8px;font-size:16px;display:flex;flex-direction:column;overflow-anchor:auto}
+.msg-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #333;flex-wrap:wrap}
+.msg-input{flex:1;padding:14px;border-radius:12px;border:none;font-size:18px;background:#2c2c2e;color:#fff;min-width:100px}
+.record-btn,.send-btn,.cancel-rec-btn{width:56px;height:56px;border-radius:14px;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;position:relative}
+.record-btn{background:#ff9f0a;color:#000;font-size:26px}
+.record-btn.recording{background:red;color:#fff;animation:pulse .6s infinite}
+.cancel-rec-btn{background:#666;color:#fff;font-size:22px}
+.send-btn{background:var(--blue);color:#fff;font-size:18px;font-weight:700}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 28px;border-radius:30px;font-size:18px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90%}
+.toast.show{opacity:1}
+.login-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.login-modal.active{display:flex}
+.login-card{background:#1c1c1e;border:2px solid var(--gold);border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center}
+.login-card input{width:100%;padding:16px;margin:8px 0;border-radius:12px;border:none;font-size:20px;background:#2c2c2e;color:#fff}
+.login-card .btn{font-size:22px;padding:16px}
+.login-card .btn-secondary{background:#3a3a3c;color:#fff;margin-top:8px}
+.route-strip{display:flex;overflow-x:auto;gap:14px;padding:16px 10px;border-top:2px solid #555;margin-top:12px;background:rgba(255,255,255,0.05);border-radius:12px;min-height:80px;scroll-behavior:smooth;align-items:center}
+.dot-node{flex:0 0 180px;text-align:center;font-size:18px;transition:all .3s;white-space:nowrap;overflow:visible;flex-shrink:0;padding:4px 0}
+.dot{width:32px;height:32px;border-radius:50%;background:#444;margin:0 auto 6px;border:3px solid #666;transition:all .3s}
+.dot-node.current .dot{background:#00ff66;box-shadow:0 0 24px #00ff66;border-color:#fff;transform:scale(1.15)}
+.dot-node.current span{color:#fff;font-weight:800;font-size:20px}
+.dot-node.next .dot{background:#00ff66;animation:blink .8s infinite;border-color:#fff}
+.dot-node.next span{color:#00ff66;font-weight:700}
+.dot-node.passed .dot{background:#666;border-color:#888;opacity:.5}
+.dot-node.passed span{color:#888}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.9)}}
+.play-audio{background:var(--blue);color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:15px}
+.walkie-talkie{background:#2c1a3a;border:2px solid var(--gold);border-radius:16px;padding:16px;margin-top:8px}
+.walkie-talkie .btn{font-size:28px;padding:20px}
+.walkie-talkie .record-btn{width:72px;height:72px;font-size:36px}
+.walkie-talkie .cancel-rec-btn{width:72px;height:72px;font-size:32px;background:#555}
+.admin-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.admin-tab{flex:1;min-width:70px;padding:12px 8px;background:#2c2c2e;border:none;color:#888;border-radius:12px;cursor:pointer;font-size:16px;font-weight:700;transition:.3s}
+.admin-tab.active{background:var(--gold);color:#000}
+.admin-section{display:none}
+.admin-section.active{display:block}
+.admin-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.admin-stat-card{background:#2c2c2e;border-radius:12px;padding:12px;text-align:center}
+.admin-stat-card .label{font-size:14px;color:#888}
+.admin-stat-card .value{font-size:28px;font-weight:800;color:var(--gold)}
+.admin-item{background:#2c2c2e;border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid var(--blue)}
+.admin-item .title{font-size:18px;font-weight:bold;color:var(--gold)}
+.admin-item .info{font-size:15px;color:#ccc}
+.admin-input{flex:1;padding:14px;border-radius:10px;border:none;font-size:18px;background:#2c2c2e;color:#fff;min-width:60px}
+.floating-announce{position:fixed;bottom:80px;right:16px;width:60px;height:60px;border-radius:50%;background:var(--green);border:none;color:#fff;font-size:28px;cursor:pointer;z-index:15;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.floating-announce.has-new{background:var(--orange);animation:pulse-orange 1s infinite}
+@keyframes pulse-orange{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.announce-bell{position:fixed;top:10px;right:68px;z-index:30;background:#333;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;display:none;align-items:center;justify-content:center;cursor:pointer}
+.announce-bell.has-announce{display:flex;background:#fc0;color:#000}
+.announce-bell .dot-badge{position:absolute;top:-2px;right:-2px;background:red;border-radius:50%;width:12px;height:12px}
+.announce-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:30;display:none;flex-direction:column;padding:16px}
+.announce-overlay.show{display:flex}
+.announce-list{flex:1;overflow-y:auto;background:#1a1a1a;border-radius:14px;padding:12px;margin-top:12px}
+.announce-item{background:#2c2c2e;border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid var(--gold)}
+.announce-item .time{font-size:12px;color:#888}
+.announce-item .text{font-size:16px}
+.announce-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:40;display:none;align-items:center;justify-content:center;padding:20px}
+.announce-modal.active{display:flex}
+.announce-modal .modal-card{background:#2c1a3a;border:2px solid var(--gold);border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center}
+.announce-modal .modal-text{font-size:22px;color:#fff;margin-bottom:12px}
+.announce-modal .close-btn{background:var(--gold);color:#000;border:none;padding:12px 24px;border-radius:12px;font-size:20px;font-weight:700;cursor:pointer}
+.msg-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:20;display:none;flex-direction:column;padding:16px}
+.msg-overlay.show{display:flex}
+.donate-card{background:#2c1a3a;border:2px solid var(--gold);border-radius:16px;padding:16px;text-align:center;margin-top:8px}
+.donate-card .fps-code{background:#000;padding:12px;border-radius:12px;display:inline-block;font-size:20px;color:var(--gold);cursor:pointer}
+#voice-toggle{font-size:28px!important;padding:20px!important;min-height:80px}
+.collapsible-list .list-container{max-height:400px;overflow-y:auto}
+.collapsible-list .list-container.expanded{max-height:none}
+.toggle-btn{background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px;margin-bottom:8px}
+.toggle-btn:active{opacity:.7}
+.wake-lock-status{position:fixed;bottom:20px;left:16px;font-size:14px;color:#888;z-index:10;background:rgba(0,0,0,.7);padding:6px 14px;border-radius:12px;border:1px solid #333}
+.wake-lock-status.active{color:var(--green);border-color:var(--green)}
+.admin-online-list{max-height:200px;overflow-y:auto;background:#1a1a1a;border-radius:10px;padding:8px;margin:8px 0}
+.admin-online-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #333;cursor:pointer;border-radius:6px;transition:background .2s}
+.admin-online-item:hover{background:#2a2a2a}
+.admin-online-item .name{color:#fff;font-weight:600}
+.admin-online-item .info{color:#888;font-size:13px}
+.admin-online-item .action-btn{background:var(--red);border:none;color:#fff;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+.admin-online-item .action-btn:hover{opacity:.8}
+.admin-online-item .action-btn.ban{background:var(--orange);color:#000}
+.admin-online-item .action-btn.kick{background:var(--red)}
+.msg-time{color:#888;font-size:12px;margin-right:6px;flex-shrink:0}
+.connection-status{position:fixed;top:60px;left:50%;transform:translateX(-50%);padding:6px 20px;border-radius:20px;font-size:14px;z-index:100;display:none}
+.connection-status.offline{background:var(--red);color:#fff;display:block}
+.connection-status.online{background:var(--green);color:#fff;display:block}
+.admin-role-badge{background:#ff9500;color:#000;padding:4px 12px;border-radius:12px;font-size:14px;font-weight:bold;display:inline-block;margin-left:8px}
+.gps-debug{background:#1a1a1a;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:14px;color:#aaa;border:1px solid #333;word-break:break-all}
+.hidden-el{display:none !important;}
+.rec-row{display:flex;gap:8px;align-items:center}
+.record-timer{position:absolute;top:-6px;right:-6px;background:red;color:#fff;border-radius:8px;padding:2px 6px;font-size:12px;display:none;}
+.msg-notification {
+    position: fixed;
+    bottom: -80px;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #2c1a3a, #1a0a2e);
+    border-top: 3px solid var(--gold);
+    padding: 14px 20px;
+    z-index: 60;
+    transition: bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.8);
+    border-radius: 20px 20px 0 0;
+    max-width: 500px;
+    margin: 0 auto;
+}
+.msg-notification.show {
+    bottom: 0;
+}
+.msg-notification .msg-icon {
+    font-size:28px;margin-right:12px;animation:bounceIn 0.5s ease;
+}
+.msg-notification .msg-content {
+    flex:1;font-size:16px;font-weight:600;color:#fff;line-height:1.4;
+}
+.msg-notification .msg-content small {
+    display:block;font-weight:400;font-size:13px;color:#aaa;
+}
+.msg-notification .msg-close-btn {
+    background:transparent;border:none;color:#888;font-size:22px;cursor:pointer;padding:4px 10px;border-radius:30px;transition:background 0.2s;
+}
+.msg-notification .msg-close-btn:hover {
+    background:rgba(255,255,255,0.1);color:#fff;
+}
+@keyframes bounceIn {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+.slider-wrap{margin:8px 0}
+.slider-wrap label{display:block;margin-bottom:4px;color:#ccc}
+input[type=range]{width:100%}
+.textarea-xl{width:100%;min-height:120px;background:#2c2c2e;color:#fff;border-radius:10px;padding:10px;border:none;font-size:15px}
+</style>
+</head>
+<body>
+<div class="header">
+<div class="title">西鐵小巴系統</div>
+<div class="dev-tag">開發者‑大輝</div>
+<button class="global-voice-toggle" id="global-voice-btn">🔊</button>
+</div>
+<div class="connection-status" id="connection-status"></div>
+<button class="floating-announce" id="floating-announce-btn">📢</button>
+<button class="announce-bell" id="announce-bell">🔔<span class="dot-badge"></span></button>
+<div class="announce-overlay" id="announce-overlay">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+<span style="font-size:24px;font-weight:bold;">📢 系統公告</span>
+<button class="btn btn-secondary" id="close-announce-overlay" style="width:auto;padding:10px 20px;font-size:18px;">✕ 關閉</button>
+</div>
+<div class="announce-list" id="announce-list-content">
+<div style="text-align:center;color:#888;padding:20px;font-size:18px;">暫無公告</div>
+</div>
+</div>
+<div class="announce-modal" id="announce-modal">
+<div class="modal-card">
+<div class="modal-text" id="announce-modal-text"></div>
+<button class="close-btn" id="announce-modal-close">關閉</button>
+</div>
+</div>
+<div class="login-modal" id="login-modal">
+  <div class="login-card">
+  <h2 style="color:var(--gold);margin-bottom:16px;font-size:28px;">🔐 登入</h2>
+  <div id="login-choice">
+  <button class="btn btn-google" id="login-google" style="font-size:20px;padding:14px;">🅶 管理員 Google 登入</button>
+  <button class="btn btn-driver" id="login-driver" style="font-size:20px;padding:14px;">🚏 司機登入</button>
+  <button class="btn btn-portal" id="login-passenger" style="font-size:20px;padding:14px;">🧍 乘客登入</button>
+  </div>
+  <div id="driver-login-form" style="display:none;">
+  <input type="text" id="driver-identifier" placeholder="電郵 或 電話號碼">
+  <button class="btn btn-green" id="driver-login-btn">確認登入</button>
+  <button class="btn btn-secondary" id="driver-login-back">返回</button>
+  <div id="driver-login-error" style="color:var(--red);margin-top:8px;font-size:16px;"></div>
+  </div>
+  <div id="passenger-login-form" style="display:none;">
+  <input type="tel" id="passenger-phone" placeholder="電話號碼 (8位數字)">
+  <button class="btn btn-portal" id="passenger-login-btn">確認登入</button>
+  <button class="btn btn-secondary" id="passenger-login-back">返回</button>
+  <div id="passenger-login-error" style="color:var(--red);margin-top:8px;font-size:16px;"></div>
+  </div>
+  <button class="btn btn-secondary" id="login-cancel">取消</button>
+  </div>
+</div>
+<div id="view-lobby" class="view active">
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;">
+<span style="font-size:22px;font-weight:bold;color:var(--gold);">📋 使用說明</span>
+<button class="btn" style="width:auto;padding:10px 20px;background:var(--gold);color:#000;font-size:18px;" id="btn-guide-voice">🔊 聆聽教學</button>
+</div>
+<div style="margin-top:10px;color:#ccc;line-height:1.8;font-size:17px;">
+🚏 司機：登入→輸入車牌→揀路線→開始當值→GPS自動報站<br>
+🧍 乘客：登入→揀選路線→追蹤小巴→開啟報站<br>
+🎙️ 對講機：司機之間／管理員與司機即時通話
+</div>
+</div>
+<button class="btn btn-portal" id="btn-passenger">🧍 乘客入口</button>
+<button class="btn btn-driver" id="btn-driver">🚏 司機入口</button>
+<button class="btn btn-warn" id="btn-generate-qr">📱 分享二維碼</button>
+<button class="btn btn-purple" id="btn-admin-panel" style="display:none;">👑 總管後台</button>
+<button class="btn btn-secondary" id="btn-logout">🚪 登出</button>
+<div class="donate-card">
+<div style="color:var(--gold);font-size:20px;font-weight:bold;margin-bottom:8px;">☕ 支持開發者</div>
+<div class="fps-code" id="fps-code">轉數快：122891914</div>
+<div style="color:#aaa;font-size:14px;margin-top:6px;">點擊複製轉數快號碼</div>
+</div>
+<div id="qr-box" class="card" style="display:none;"></div>
+</div>
+<div id="view-passenger-list" class="view">
+<h2 style="text-align:center;font-size:24px;">🚐 線上小巴</h2>
+<div class="card">
+<label style="font-size:18px;color:var(--gold)">請選擇路線：</label>
+<select id="passenger-route-select" class="admin-input"></select>
+</div>
+<div class="row">
+<button class="btn btn-secondary" id="btn-refresh-buslist">🔄 重新整理</button>
+</div>
+<div id="bus-list-container" style="margin:8px 0;font-size:18px;">請先選擇路線</div>
+<button class="btn btn-secondary" id="btn-back-list">返回大堂</button>
+</div>
+<div id="view-passenger" class="view">
+<button id="voice-toggle" class="btn">🔊 開啟廣東話自動報站</button>
+<div class="card" id="pass-data-card">讀取中…</div>
+<div class="route-strip" id="pass-route-strip"></div>
+<div class="msg-area">
+<div class="msg-list" id="pass-msg-list"></div>
+<div class="msg-row rec-row">
+<button class="record-btn" id="btn-pass-record">🎤<span class="record-timer" id="pass-timer">0s</span></button>
+<button class="cancel-rec-btn" id="btn-pass-cancel">✕</button>
+<input id="pass-msg-input" class="msg-input" placeholder="訊息…">
+<button class="send-btn" id="btn-pass-send">發</button>
+</div>
+<button class="btn btn-secondary" id="btn-pass-clear">隱藏訊息</button>
+<button class="btn btn-secondary" id="btn-pass-restore" style="display:none;">還原隱藏訊息</button>
+</div>
+<button class="btn btn-secondary" id="btn-back-track">返回列表</button>
+</div>
+<div id="view-driver" class="view">
+<div id="driver-panel" style="display:flex;flex-direction:column;gap:10px;">
+<div class="card" style="text-align:center;padding:14px;">
+<div style="font-size:18px;color:#aaa;" id="d-info">🚐 未登入 | 司機: -</div>
+<div class="row">
+<div style="flex:1;">
+<label style="color:#ccc;font-size:16px;">選擇營運路線</label>
+<select id="driver-route-select" class="admin-input"></select>
+</div>
+</div>
+<div id="superadmin-gps-setting" class="hidden-el">
+<div class="slider-wrap">
+<label>站點觸發距離：<span id="radius-val">50</span> 米 (10‑150)</label>
+<input type="range" min="10" max="150" value="50" id="station-radius-slider">
+<div class="row">
+<input class="admin-input" id="radius-input" value="50" type="number" min="10" max="150">
+<button class="btn btn-green" id="apply-radius-btn" style="width:auto;">套用設定</button>
+</div>
+</div>
+<div class="row">
+<button class="btn btn-secondary" id="gps-log-current">記錄當前GPS坐標</button>
+<button class="btn btn-secondary" id="gps-export-x1">匯出X1站點檔案</button>
+<button class="btn btn-secondary" id="gps-update-nearest">更新最近站點坐標</button>
+</div>
+</div>
+<div>
+<span class="badge badge-purple" id="d-mode-badge">西鐵快線</span>
+<span class="badge badge-red" id="d-dir-badge">往元朗</span>
+</div>
+<div class="station-name" id="d-station">大棠黃泥墩</div>
+<div class="target-station" id="d-target" style="font-size:20px;color:var(--gold);">下一站：大棠山路巴士站</div>
+<div id="d-gps-status" style="font-size:16px;color:#888;margin-top:4px;">📍 GPS 定位中...</div>
+<div id="gps-debug" class="gps-debug hidden-el">
+lat: 0.000000, lng: 0.000000<br>距離: 0 m<br>狀態: 等待GPS數據
+</div>
+<div id="d-voice-status" style="margin-top:6px;font-size:15px;color:#aaa;">🔊 語音：待機</div>
+</div>
+<div class="control-row">
+  <button id="btn-start" class="btn btn-primary">▶ 開始報站</button>
+  <button id="btn-stop" class="btn btn-danger">⏹ 停止報站</button>
+</div>
+<div class="control-row">
+  <button id="btn-vol-up" class="btn">🔊 音量+</button>
+  <button id="btn-vol-down" class="btn">🔉 音量‑</button>
+  <button id="btn-toggle-debug" class="btn">📋 顯示GPS調試</button>
+</div>
+<div class="info-box" style="margin-top:12px;font-size:14px;color:#777;">
+  <div>路線：西鐵快線｜方向：往元朗</div>
+  <div>GPS觸發距離：30米｜語音音量：50%</div>
+</div>
+<footer style="margin-top:20px;text-align:center;font-size:12px;color:#777;padding-bottom:20px;">
+西鐵小巴GPS報站系統 v10.2‑修復版
+</footer>
+</div>
+</div>
+<script>
+// ========== 西鐵小巴 GPS 報站系統 - 修復版 ==========
+var firebaseConfig = {
+  apiKey: "AIzaSyAzWWxpFgiWc18XjMmqhUDjDRDzOX-wbiA",
+  authDomain: "new-west-rail-minibus-system.firebaseapp.com",
+  databaseURL: "https://new-west-rail-minibus-system-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "new-west-rail-minibus-system",
+  storageBucket: "new-west-rail-minibus-system.firebasestorage.app",
+  messagingSenderId: "631065134807",
+  appId: "1:631065134807:web:25873d238e9df650c59292",
+  measurementId: "G-TV957DXF18"
+};
+try {
+  firebase.initializeApp(firebaseConfig);
+  console.log("✅ Firebase 初始化成功 (新專案)");
+} catch (e) {
+  console.warn("⚠️ Firebase 初始化失敗（可能網絡問題），其他功能仍可運行", e);
+}
+
+function showToast(msg) {
+  var t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  void t.offsetWidth;
+  t.classList.add('show');
+  setTimeout(function() {
+    t.classList.remove('show');
+    setTimeout(function() { t.remove(); }, 400);
+  }, 2200);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("✅ DOM 已載入，開始綁定事件");
+  var dStation = document.getElementById('d-station');
+  var dTarget = document.getElementById('d-target');
+  var dGpsStatus = document.getElementById('d-gps-status');
+  var gpsDebug = document.getElementById('gps-debug');
+  var dVoiceStatus = document.getElementById('d-voice-status');
+  var btnStart = document.getElementById('btn-start');
+  var btnStop = document.getElementById('btn-stop');
+  var btnVolUp = document.getElementById('btn-vol-up');
+  var btnVolDown = document.getElementById('btn-vol-down');
+  var btnToggleDebug = document.getElementById('btn-toggle-debug');
+
+  if (!btnStart || !btnStop) {
+    showToast("❌ 錯誤：找不到司機按鈕");
+    console.error("司機按鈕缺失");
+    return;
+  }
+
+  // 系統變數
+  var isRunning = false;
+  var voiceVolume = 0.8;
+  var triggerDistance = 30;
+  var watchId = null;
+  var currentLat = 0.0;
+  var currentLng = 0.0;
+  var lastAnnounceTime = 0;
+  var lastAnnouncedStationName = null;
+  var wakeLock = null;
+
+  var stationList = [
+    { name: "大棠黃泥墩", lat: 22.4291, lng: 114.0213 },
+    { name: "大棠山路巴士站", lat: 22.4320, lng: 114.0180 },
+    { name: "元朗大馬路", lat: 22.4420, lng: 114.0250 },
+    { name: "元朗西鐵站", lat: 22.4450, lng: 114.0320 }
+  ];
+
+  function calcDistance(lat1, lon1, lat2, lon2) {
+    var R = 6371000;
+    var rad = Math.PI / 180;
+    var phi1 = lat1 * rad;
+    var phi2 = lat2 * rad;
+    var deltaPhi = (lat2 - lat1) * rad;
+    var deltaLambda = (lon2 - lon1) * rad;
+    var a = Math.sin(deltaPhi / 2) ** 2 +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // 檢查粵語語音是否可用
+  function checkCantoneseVoice() {
+    if(!window.speechSynthesis) return false;
+    var voices = speechSynthesis.getVoices();
+    var hasHKVoice = voices.some(v => v.lang === "zh-HK");
+    if(!hasHKVoice){
+      showToast("⚠️ 裝置無zh‑HK粵語語音包，可能變普通話播報");
+    }
+    return hasHKVoice;
+  }
+  speechSynthesis.onvoiceschanged = checkCantoneseVoice;
+
+  function speakNotice(text) {
+    try {
+      if (!window.speechSynthesis) {
+        dVoiceStatus.textContent = "🔊 不支援";
+        showToast("⚠️ 此瀏覽器不支援語音");
+        return;
+      }
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      speechSynthesis.cancel();
+      var utt = new SpeechSynthesisUtterance(text);
+      utt.lang = "zh-HK";
+      utt.volume = voiceVolume;
+      utt.onstart = function() { dVoiceStatus.textContent = "🔊 播放中"; };
+      utt.onend = function() { dVoiceStatus.textContent = "🔊 待機"; };
+      utt.onerror = function(e) {
+        dVoiceStatus.textContent = "🔊 錯誤";
+        console.warn("語音錯誤", e);
+      };
+      speechSynthesis.speak(utt);
+      showToast("🗣️ " + text);
+    } catch (e) {
+      console.error("語音異常", e);
+      dVoiceStatus.textContent = "🔊 異常";
+    }
+  }
+
+  // 修復：不再依賴單向index，實時搜尋最近站點
+  function onPosition(pos) {
+    currentLat = pos.coords.latitude;
+    currentLng = pos.coords.longitude;
+    dGpsStatus.innerHTML = "📍 GPS 已定位";
+    if (gpsDebug) {
+      gpsDebug.innerHTML = "lat: " + currentLat.toFixed(6) + ", lng: " + currentLng.toFixed(6) +
+        "<br>距離: -- m<br>狀態: 接收GPS數據";
+    }
+    if (!isRunning) return;
+
+    // 計算全部站點距離，搵最近站
+    let minDist = Infinity;
+    let nearestStation = null;
+    for(let s of stationList){
+      let d = calcDistance(currentLat,currentLng,s.lat,s.lng);
+      if(d < minDist){
+        minDist = d;
+        nearestStation = s;
+      }
+    }
+
+    if(gpsDebug){
+      gpsDebug.innerHTML = "lat: " + currentLat.toFixed(6) + ", lng: " + currentLng.toFixed(6)+
+      "<br>最近站："+(nearestStation?.name||"無")+"｜距離:"+Math.round(minDist)+" m<br>狀態:接收GPS數據";
+    }
+
+    if(!nearestStation) return;
+    let now = Date.now();
+    // 到達觸發距離，同埋防短時間重複播報
+    if(minDist < triggerDistance && (lastAnnouncedStationName !== nearestStation.name || now - lastAnnounceTime >30000)){
+      speakNotice(nearestStation.name);
+      dStation.textContent = nearestStation.name;
+      lastAnnouncedStationName = nearestStation.name;
+      lastAnnounceTime = now;
+      // 搵下一站簡易邏輯
+      let idx = stationList.findIndex(x=>x.name === nearestStation.name);
+      if(idx >=0 && idx+1 < stationList.length){
+        dTarget.textContent = "下一站："+stationList[idx+1].name;
+      }else{
+        dTarget.textContent = "已到達總站";
+      }
+    }
+  }
+
+  function onGpsError(err) {
+    dGpsStatus.innerHTML = "⚠️ GPS錯誤：" + err.message;
+    if (gpsDebug) gpsDebug.innerHTML = "GPS錯誤：" + err.message;
+  }
+
+  // 螢幕喚醒鎖
+  async function acquireWakeLock(){
+    if(!navigator.wakeLock) return;
+    try{
+      wakeLock = await navigator.wakeLock.request('screen');
+      document.getElementById("wake-lock-status").classList.add("active");
+    }catch(e){
+      console.warn("無法取得螢幕喚醒鎖",e);
+    }
+  }
+  function releaseWakeLock(){
+    if(wakeLock){
+      wakeLock.release().catch(e=>console.warn(e));
+      wakeLock = null;
+    }
+    document.getElementById("wake-lock-status").classList.remove("active");
+  }
+
+  btnStart.onclick = async function() {
+    if (isRunning) return;
+    // 重置全部狀態
+    lastAnnounceTime = 0;
+    lastAnnouncedStationName = null;
+    if(stationList.length>0){
+      dStation.textContent = stationList[0].name;
+      dTarget.textContent = stationList.length>1 ? ("下一站："+stationList[1].name) : "已到達總站";
+    }
+    if (navigator.geolocation) {
+      // 修復GPS參數，放寬maximumAge，減少超時報錯
+      watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
+        enableHighAccuracy: true,
+        maximumAge:2000,
+        timeout:8000
+      });
+      isRunning = true;
+      await acquireWakeLock();
+      dGpsStatus.innerHTML = "📍 GPS 監測中...";
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      showToast("▶️ 報站已啟動");
+    } else {
+      alert("此裝置不支援 GPS");
+    }
+  };
+
+  function doStopReport(){
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    isRunning = false;
+    releaseWakeLock();
+    dGpsStatus.innerHTML = "📍 GPS 已停止";
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    try { window.speechSynthesis.cancel(); } catch(e) {}
+    dVoiceStatus.textContent = "🔊 已停止";
+    showToast("⏹️ 報站已停止");
+  }
+
+  btnStop.onclick = doStopReport;
+
+  // 頁面關閉/切tab，清理GPS
+  window.addEventListener('beforeunload',function(){
+    if(watchId!==null) navigator.geolocation.clearWatch(watchId);
+    releaseWakeLock();
+  });
+
+  btnVolUp.onclick = function() {
+    voiceVolume = Math.min(1, voiceVolume + 0.1);
+    showToast("🔊 音量：" + Math.round(voiceVolume * 100) + "%");
+  };
+  btnVolDown.onclick = function() {
+    voiceVolume = Math.max(0, voiceVolume - 0.1);
+    showToast("🔉 音量：" + Math.round(voiceVolume * 100) + "%");
+  };
+
+  btnToggleDebug.onclick = function() {
+    if (gpsDebug) {
+      gpsDebug.classList.toggle('hidden-el');
+      showToast("📋 調試已" + (gpsDebug.classList.contains('hidden-el') ? "隱藏" : "顯示"));
+    }
+  };
+
+  // 訊息發送冷卻：乘客同司機都加上
+  var lastMsgTime = 0;
+  var btnPassSend = document.getElementById('btn-pass-send');
+  if (btnPassSend) {
+    btnPassSend.addEventListener('click', function() {
+      var now = Date.now();
+      if (now - lastMsgTime < 3000) {
+        showToast("請等候 3 秒再發送");
+        return;
+      }
+      var input = document.getElementById('pass-msg-input');
+      if (!input) return;
+      var text = input.value.trim();
+      if (!text) return;
+      showToast("📨 訊息已發送 (模擬)");
+      input.value = '';
+      lastMsgTime = now;
+    });
+  }
+
+  btnStop.disabled = true;
+  showToast("✅ 修復版系統已就緒，請前往司機頁面開始報站");
+  console.log("西鐵小巴系統【修復版】已啟動");
+});
+</script>
+</body>
+</html>
