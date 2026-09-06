@@ -13,7 +13,7 @@
 <style>
 :root{--bg:#0f0f0f;--card:#1c1c1e;--gold:#fc0;--blue:#0a84ff;--red:#ff453a;--green:#30d158;--purple:#bf5af2;--orange:#ff9500;--radius:16px}
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-body{background:var(--bg);color:#fff;height:100vh;display:flex;flex-direction:column;/*修復：移除overflow:hidden，允許頁面滾動*/}
+body{background:var(--bg);color:#fff;height:100vh;display:flex;flex-direction:column;}
 .header{padding:10px;text-align:center;border-bottom:1px solid #333;flex-shrink:0;position:relative}
 .title{font-size:32px;font-weight:800;color:var(--gold)}
 .dev-tag{font-size:16px;color:#aaa;cursor:pointer}
@@ -33,10 +33,8 @@ body{background:var(--bg);color:#fff;height:100vh;display:flex;flex-direction:co
 .btn-red{background:var(--red)}
 .btn-purple{background:var(--purple)}
 .btn-google{background:#fff;color:#000;border:1px solid #ddd}
-/*修復：補返缺失 btn-primary btn-danger*/
 .btn-primary{background:linear-gradient(135deg,#00c853,#009624);}
 .btn-danger{background:linear-gradient(135deg,#ff1744,#b71c1c);}
-
 .row{display:flex;gap:12px;margin-bottom:10px}
 .row>*{flex:1}
 .badge{display:inline-block;padding:8px 20px;border-radius:20px;font-weight:700;font-size:18px;margin:4px}
@@ -282,7 +280,7 @@ input[type=range]{width:100%}
 <button class="btn btn-secondary" id="btn-pass-clear">隱藏訊息</button>
 <button class="btn btn-secondary" id="btn-pass-restore" style="display:none;">還原隱藏訊息</button>
 </div>
-<button class="btn btn-secondary" id="btn-back-track">返回列表</button>
+<button class="btn btn-secondary" id="btn-pass-clear-back">返回列表</button>
 </div>
 <div id="view-driver" class="view">
 <div id="driver-panel" style="display:flex;flex-direction:column;gap:10px;">
@@ -340,7 +338,6 @@ lat: 0.000000, lng: 0.000000<br>距離: 0 m<br>狀態: 等待GPS數據
 </div>
 </div>
 <script>
-// ========== 西鐵小巴 GPS 報站系統 - 修復版 ==========
 var firebaseConfig = {
   apiKey: "AIzaSyAzWWxpFgiWc18XjMmqhUDjDRDzOX-wbiA",
   authDomain: "new-west-rail-minibus-system.firebaseapp.com",
@@ -373,6 +370,24 @@ function showToast(msg) {
 
 document.addEventListener('DOMContentLoaded', function() {
   console.log("✅ DOM 已載入，開始綁定事件");
+
+  // 視圖切換
+  const viewIds = ["view-lobby","view-passenger-list","view-passenger","view-driver"];
+  function switchView(targetId){
+    viewIds.forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.classList.remove("active");
+    });
+    const target = document.getElementById(targetId);
+    if(target) target.classList.add("active");
+  }
+
+  document.getElementById("btn-driver").addEventListener("click",()=>switchView("view-driver"));
+  document.getElementById("btn-passenger").addEventListener("click",()=>switchView("view-passenger-list"));
+  document.getElementById("btn-back-list").addEventListener("click",()=>switchView("view-lobby"));
+  document.getElementById("btn-back-track").addEventListener("click",()=>switchView("view-passenger-list"));
+  document.getElementById("btn-pass-clear-back").addEventListener("click",()=>switchView("view-passenger-list"));
+
   var dStation = document.getElementById('d-station');
   var dTarget = document.getElementById('d-target');
   var dGpsStatus = document.getElementById('d-gps-status');
@@ -390,7 +405,6 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
 
-  // 系統變數
   var isRunning = false;
   var voiceVolume = 0.8;
   var triggerDistance = 30;
@@ -421,7 +435,6 @@ document.addEventListener('DOMContentLoaded', function() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // 檢查粵語語音是否可用
   function checkCantoneseVoice() {
     if(!window.speechSynthesis) return false;
     var voices = speechSynthesis.getVoices();
@@ -459,7 +472,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 修復：不再依賴單向index，實時搜尋最近站點
   function onPosition(pos) {
     currentLat = pos.coords.latitude;
     currentLng = pos.coords.longitude;
@@ -470,7 +482,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (!isRunning) return;
 
-    // 計算全部站點距離，搵最近站
     let minDist = Infinity;
     let nearestStation = null;
     for(let s of stationList){
@@ -488,13 +499,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if(!nearestStation) return;
     let now = Date.now();
-    // 到達觸發距離，同埋防短時間重複播報
     if(minDist < triggerDistance && (lastAnnouncedStationName !== nearestStation.name || now - lastAnnounceTime >30000)){
       speakNotice(nearestStation.name);
       dStation.textContent = nearestStation.name;
       lastAnnouncedStationName = nearestStation.name;
       lastAnnounceTime = now;
-      // 搵下一站簡易邏輯
       let idx = stationList.findIndex(x=>x.name === nearestStation.name);
       if(idx >=0 && idx+1 < stationList.length){
         dTarget.textContent = "下一站："+stationList[idx+1].name;
@@ -509,7 +518,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (gpsDebug) gpsDebug.innerHTML = "GPS錯誤：" + err.message;
   }
 
-  // 螢幕喚醒鎖
   async function acquireWakeLock(){
     if(!navigator.wakeLock) return;
     try{
@@ -529,7 +537,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   btnStart.onclick = async function() {
     if (isRunning) return;
-    // 重置全部狀態
     lastAnnounceTime = 0;
     lastAnnouncedStationName = null;
     if(stationList.length>0){
@@ -537,7 +544,6 @@ document.addEventListener('DOMContentLoaded', function() {
       dTarget.textContent = stationList.length>1 ? ("下一站："+stationList[1].name) : "已到達總站";
     }
     if (navigator.geolocation) {
-      // 修復GPS參數，放寬maximumAge，減少超時報錯
       watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
         enableHighAccuracy: true,
         maximumAge:2000,
@@ -568,10 +574,8 @@ document.addEventListener('DOMContentLoaded', function() {
     dVoiceStatus.textContent = "🔊 已停止";
     showToast("⏹️ 報站已停止");
   }
-
   btnStop.onclick = doStopReport;
 
-  // 頁面關閉/切tab，清理GPS
   window.addEventListener('beforeunload',function(){
     if(watchId!==null) navigator.geolocation.clearWatch(watchId);
     releaseWakeLock();
@@ -593,7 +597,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   };
 
-  // 訊息發送冷卻：乘客同司機都加上
   var lastMsgTime = 0;
   var btnPassSend = document.getElementById('btn-pass-send');
   if (btnPassSend) {
